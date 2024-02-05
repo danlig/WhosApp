@@ -1,122 +1,145 @@
-import os
 import time
 import logging
 import calendar
-from typing import Tuple, Any
-
 import pandas as pd
-from utility.dataset.extractChat import ExtractChat
-from utility.dataset.rawDataReader import rawDataReader
-from utility.dataset.dataFrameProcess import DataFrameProcessor
-from utility.dataset.featureConstruction import featureConstruction
+from collections.abc import Hashable
+from ..dataset.extractChat import ExtractChat
+from ..exceptions import SetterNotAllowedError
+from ..dataset.rawDataReader import RawDataReader
+from ..clean_coding.decorator import check_path_exists
+from ..dataset.dataFrameProcess import DataFrameProcessor
+from ..dataset.featureConstruction import FeatureConstruction
+from ..config_path import DATASET_PATH, CONFIG_PATH, RAWDATA_PATH
+from ..clean_coding.ensure import *
 
 
-class datasetCreation:
-    DATA_PATH = "../data/rawdata"
-    DATASET_PATH = "../data/datasets/"
-    CONFIG_PATH = "../configs/"
-
+@check_path_exists(path=DATASET_PATH, create=True)
+@validation(
+    "dataset_name",
+    "Nome del dataset",
+    ensure_not_none("dataset_" + str(calendar.timegm(time.gmtime()))), ensure_valid_file_extension(".parquet"))
+@validation(
+    "config_file",
+    "File di configurazione",
+    ensure_not_none("config.json"), ensure_valid_file_extension(".json"), ensure_file_exists("../configs/", ""))
+@validation(
+    "alias_file",
+    "File per gli alias in chat",
+    ensure_valid_file_extension(".json", allow_none=True), ensure_file_exists("../configs/", "", allow_none=True))
+@validation(
+    "other_user",
+    "Utente Blob",
+    ensure_valid_type(Hashable, allow_none=True))
+@validation(
+    "remove_other",
+    "Rimuovi Blob",
+    ensure_valid_type(bool))
+@validation(
+    "refactor",
+    "Opzione di refactor",
+    ensure_valid_type(bool), ensure_not_none(False))
+class DatasetCreation:
     def __init__(
             self,
-            dataset_name: str = None,
-            config_file: str = "config.json",
-            alias_file: str = None,
+            dataset_name: str,
+            config_file: str,
+            alias_file: str,
             other_user: str = None,
             remove_other: bool = False,
             refactor: bool = False
     ):
-        self.__dataset_name = self.__check_dataset_name(dataset_name)
-        self.__config_file = self.__check_config_file(config_file)
-        self.__alias_file, self.__other_user, self.__remove_other = self.__check_aliases_file(alias_file, other_user, remove_other)
+        self._dataset_name = dataset_name
+        self._config_file = config_file
+        self._alias_file = alias_file
 
-        # Controlla se refactor è stato inserito
-        if not isinstance(refactor, bool):
-            raise TypeError("refactor deve essere un booleano")
-        self.__isToRefactor = True if refactor else False
+        self._other_user = other_user if self._alias_file is not None else None
+        self._remove_other = remove_other if self._alias_file is not None else False
 
-        self.__dataFrame = None
-        self.__check_dataset_path()
+        self._refactor = refactor
+        self.__data_frame = None
 
-    def __check_config_file(self, config_file: str) -> str:
-        """Controlla se il file di configurazione è stato inserito"""
-        if config_file and os.path.exists(self.CONFIG_PATH + config_file):
-            return self.__check_extension_file(config_file, ".json")
-        else:
-            return "config.json"
+    # -------- Getter & Setter --------
+    @property
+    def data_frame(self):
+        return self.__data_frame
 
-    def __check_aliases_file(
-            self,
-            aliases_file: str,
-            other_user: str,
-            remove_other: bool
-    ) -> tuple[str, str, bool] | tuple[None, None, bool]:
-        """Controlla se il file di configurazione è stato inserito"""
-        if aliases_file and os.path.exists(self.CONFIG_PATH + aliases_file):
-            return self.__check_extension_file(aliases_file, ".json"), other_user, remove_other
-        else:
-            return None, None, False
+    @data_frame.setter
+    def data_frame(self, value):
+        raise SetterNotAllowedError("data_frame must not be set. Use run() method instead")
 
-    def __check_dataset_name(self, name: str) -> str:
-        """Controlla se il nome del dataset è stato inserito"""
-        if name:
-            return self.__check_extension_file(name, ".parquet")
-        else:
-            timestamp = calendar.timegm(time.gmtime())
-            return "dataset_" + str(timestamp) + ".parquet"
-
-    @staticmethod
-    def __check_extension_file(filename: str, ext: str):
-        """Controlla se l'estensione del file è quella specificata"""
-        if not filename.endswith(ext):
-            filename += ext
-        return filename
-
-    @classmethod
-    def __check_dataset_path(cls):
-        """Crea cartella dataset se non esiste"""
-        if not os.path.exists(cls.DATASET_PATH):
-            os.makedirs(cls.DATASET_PATH)
+    # -------- Methods --------
 
     def run(self):
-        """Avvia la creazione del dataset."""
+        """Genera il frame"""
+        logging.info(f"Dataset name: {self._dataset_name}")
 
-        # LOGGING:: Stampa il nome del dataset
-        logging.info(f"Dataset name: {self.__dataset_name}")
+        if not os.path.exists(DATASET_PATH + self._dataset_name) or self._refactor:
+            self.__create_dataset()
+        elif os.path.exists(DATASET_PATH + self._dataset_name):
+            self.__load_existing_dataset()
 
-        # se il file non esiste oppure è richiesta un ricreazione di esso, esegue tutte le operazioni
-        if not os.path.exists(self.DATASET_PATH + self.__dataset_name) or self.__isToRefactor:
+    def __create_dataset(self):
+        """Crea il dataset"""
+        print("\n[LOADING] Leggendo le chat dai file grezzi...")
+        rawdata = self.__read_raw_data()
 
-            print("\n[LOADING] Leggendo le chat dai file grezzi...")
-            rawdata = rawDataReader(self.DATA_PATH).read_all_files()
+        print("\n[LOADING] Estraendo informazioni dai dati grezzi...")
+        dates, users, messages = self.__extract_info(rawdata)
 
-            print("\n[LOADING] Estraendo informazioni dai dati grezzi...")
-            if self.__alias_file:
-                dates, users, messages = ExtractChat(
-                    rawdata,
-                    self.CONFIG_PATH + self.__alias_file,
-                    self.__other_user
-                ).extract()
-            else:
-                dates, users, messages = ExtractChat(rawdata).extract()
+        print("\n[LOADING] Creando il dataframe e applicando data cleaning e undersampling...")
+        self.__data_frame = self.__process_data(dates, users, messages)
 
-            print("\n[LOADING] Creando il dataframe e applicando data cleaning e undersampling...")
-            self.__dataFrame = DataFrameProcessor(dates, users, messages, self.__other_user, self.__remove_other).get_dataframe()
+        print("\n[LOADING] Applicando feature construction...")
+        self.__data_frame = self.__construct_features()
 
-            print("\n[LOADING] Applicando feature construction...")
-            self.__dataFrame = featureConstruction(
-                self.__dataFrame,
-                self.DATASET_PATH + self.__dataset_name,
-                self.CONFIG_PATH + self.__config_file
-            ).get_dataframe()
+        print("[INFO] Dataset creato con successo.")
 
-            print("[INFO] Dataset creato con successo.")
+    @staticmethod
+    def __read_raw_data():
+        """
+        Legge i dati grezzi
+        :return: dati grezzi
+        """
+        return RawDataReader(RAWDATA_PATH).read_all_files()
 
-        # se il file esiste già allora salva il DF esistente
-        elif os.path.exists(self.DATASET_PATH + self.__dataset_name):
-            print("[INFO] Trovato dataset esistente")
-            self.__dataFrame = pd.read_parquet(self.DATASET_PATH + self.__dataset_name)
+    def __extract_info(self, rawdata):
+        """
+        Estrae le informazioni dai dati grezzi
+        :param rawdata: dati grezzi
+        :return: tuple di date, utenti e messaggi
+        """
+        if self._alias_file:
+            return ExtractChat(
+                rawdata,
+                aliases=CONFIG_PATH + self._alias_file,
+                placeholder_user=self._other_user
+            ).extract()
+        else:
+            return ExtractChat(rawdata).extract()
 
-    # -------- Getter --------
-    @property
-    def dataFrame(self):
-        return self.__dataFrame
+    def __process_data(self, dates, users, messages):
+        """
+        Crea il dataframe e applica data cleaning e undersampling
+        :param dates: date dei messaggi
+        :param users: autori dei messaggi
+        :param messages: messaggi
+        :return: dataframe
+        """
+        return DataFrameProcessor(dates, users, messages, self._other_user, self._remove_other).run()
+
+    def __construct_features(self):
+        """
+        Crea le feature del dataframe utili alla predizione
+        :return: dataframe
+        """
+
+        return FeatureConstruction(
+            self.__data_frame,
+            self._dataset_name,
+            self._config_file
+        ).get_dataframe()
+
+    def __load_existing_dataset(self):
+        """Carica un dataset esistente"""
+        print("[INFO] Trovato dataset esistente")
+        self.__dataFrame = pd.read_parquet(DATASET_PATH + self._dataset_name)

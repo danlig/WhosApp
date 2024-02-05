@@ -3,7 +3,7 @@ import calendar
 import argparse
 from utility.logging import LoggerReport, LoggerUser, LoggerUserModelHistory
 from utility.model.modelTraining import ModelTraining
-from utility.dataset.datasetCreation import datasetCreation
+from utility.dataset.datasetCreation import DatasetCreation
 from utility.cmdlineManagement.modelSelection import ModelSelection
 from utility.cmdlineManagement.datasetSelection import DatasetSelection
 from utility.cmdlineManagement.PlaceholderUserManager import PlaceholderUserManager
@@ -61,7 +61,7 @@ def create_dataset_and_train_model():
     selected_model = ModelSelection().model
 
     # Creazione del dataset con i parametri passati da linea di comando
-    dataset_creator = datasetCreation(
+    dataset_creator = DatasetCreation(
         dataset_name,
         config,
         aliases_file,
@@ -74,14 +74,13 @@ def create_dataset_and_train_model():
     LoggerUserModelHistory.append_model_user(dataset_name, output_name)
 
     # Usa il dataset creato oppure effettua la selezione del dataset
-    selected_dataset = dataset_creator.dataFrame if dataset_creator.dataFrame is not None else DatasetSelection().dataset
+    selected_dataset = dataset_creator.data_frame if dataset_creator.data_frame is not None else DatasetSelection().dataset
 
     # Se il output_name non è None, lo imposta al timestamp. Altrimenti lo usa
     output_name = args.outputName if args.outputName is not None else timestamp
 
     # Training del modello con i parametri passati da linea di comando
     ModelTraining(output_name, selected_model, selected_dataset, config, retrain).run()
-
 
     LoggerUser.close()
 

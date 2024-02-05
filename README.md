@@ -67,8 +67,15 @@ The project is organized into the following directories:
 - `py src/pipeline.py`:  Creates a new dataset and model from the raw data in `data/raw/` and saves them in `data/dataset/` and `models/` respectively.
 - `py src/test_features.py`: test the features that you have configured in the `configs/config.json` file
 For more information on how to use these scripts, run `py <script_name>.py -h`
+ 
+## Contributing 🤝
 
----                                                                          
+If you are interested in contributing to Whosapp, we welcome your collaboration! 
+Feel free to contribute by following the guidelines outlined in our [CONTRIBUTING](CONTRIBUTING.md) page. 
+Whether it's reporting issues, suggesting improvements, or submitting your own code changes, your contributions are highly appreciated.
+Let's build Whosapp together! 🚀
+---
+
 ### Authors
 - [Daniele Liguori](https://github.com/danlig)
 - [José Sgariglia](https://github.com/jose-sgariglia)

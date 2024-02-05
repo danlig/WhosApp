@@ -21,10 +21,10 @@ if __name__ == "__main__":
     # Argomenti da linea di comando
     parser = argparse.ArgumentParser()
 
-    timestamp = str(calendar.timegm(time.gmtime()))
+    timestamp = "model_" + str(calendar.timegm(time.gmtime()))
 
     # Optional arguments
-    parser.add_argument("-oN", "--outputName", help="Nome file del modello salvato" , required=False, default=timestamp)
+    parser.add_argument("-oN", "--outputName", help="Nome file del modello salvato", required=False, default=timestamp)
     parser.add_argument("-c", "--config", help="File config", required=False)
     parser.add_argument("-r", "--retrain", action="store_true", help="Opzione di retraining", required=False)
 

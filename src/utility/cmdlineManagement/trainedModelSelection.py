@@ -2,8 +2,8 @@ import os
 import logging
 import pandas as pd
 import inquirer
-from utility.exceptions import ExtensionError
-from utility.model.modelTraining import ModelTraining
+from ..exceptions import ExtensionError
+from ..model.modelTraining import ModelTraining
 from joblib import load
 
 

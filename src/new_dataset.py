@@ -2,7 +2,7 @@ import time
 import calendar
 import argparse
 from utility.logging import LoggerReport, LoggerUser
-from utility.dataset.datasetCreation import datasetCreation
+from utility.dataset.datasetCreation import DatasetCreation
 from utility.cmdlineManagement.PlaceholderUserManager import PlaceholderUserManager
 
 
@@ -20,7 +20,7 @@ if __name__ == "__main__":
     # Argomenti da linea di comando
     parser = argparse.ArgumentParser()
 
-    timestamp = str(calendar.timegm(time.gmtime()))
+    timestamp = "dataset_" + str(calendar.timegm(time.gmtime()))
 
     # Optional arguments
     parser.add_argument("-dN", "--datasetName", help="Nome dataset", required=False, default=timestamp)
@@ -44,13 +44,6 @@ if __name__ == "__main__":
     LoggerUser.open(dataset_name)
 
     # Creazione del dataset con i parametri passati da linea di comando
-    datasetCreation(
-        dataset_name,
-        config,
-        aliases_file,
-        placeholder_user,
-        remove_generic,
-        refactor
-    ).run()
+    DatasetCreation(dataset_name, config, aliases_file, placeholder_user, remove_generic, refactor).run()
 
     LoggerUser.close()

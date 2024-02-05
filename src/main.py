@@ -5,7 +5,7 @@ import requests
 import json
 from threading import Lock
 from flask import Flask, jsonify, request
-from utility.dataset.featureConstruction import featureConstruction
+from utility.dataset.featureConstruction import FeatureConstruction
 from utility.cmdlineManagement.trainedModelSelection import TrainedModelSelection
 
 app = Flask(__name__)
@@ -41,7 +41,7 @@ class modelExecution:
 
     def dataframe_for_messages(self, message):
         # Applica feature construction al messaggio
-        df = featureConstruction(dataFrame=pd.DataFrame({"message": message}),\
+        df = FeatureConstruction(dataFrame=pd.DataFrame({"message": message}),\
                                  datasetPath="./", saveDataFrame=False)\
                                 .get_dataframe()
         

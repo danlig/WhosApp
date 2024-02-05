@@ -2,7 +2,7 @@ import os
 import logging
 import pandas as pd
 import inquirer
-from utility.exceptions import ExtensionError
+from ..exceptions import ExtensionError
 
 
 class DatasetSelection:

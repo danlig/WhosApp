@@ -1,4 +1,3 @@
-import os
 import json
 import time
 import logging
@@ -8,84 +7,76 @@ import pandas as pd
 from joblib import dump
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, ConfusionMatrixDisplay, roc_curve, auc
-from utility.dataset.featureConstruction import featureConstruction
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, ConfusionMatrixDisplay
+from ..dataset.featureConstruction import FeatureConstruction
 from sklearn.model_selection import train_test_split, cross_validate
-from utility.exceptions import DatasetNotFoundError, ModelNotFoundError
+from ..exceptions import DatasetNotFoundError, ModelNotFoundError
 import matplotlib.pyplot as plt
-from sklearn import metrics
-from itertools import cycle
 from sklearn.metrics import roc_curve, auc
 from sklearn.preprocessing import label_binarize
+from ..clean_coding.ensure import *
+from ..clean_coding.decorator import check_path_exists
+from ..config_path import MODELS_PATH, CONFIG_PATH
 
 
+@check_path_exists(path="../models/", create=True)
+@validation(
+    "output_name",
+    "Nome del modello da salvare",
+    ensure_not_none("model_" + str(calendar.timegm(time.gmtime()))), ensure_valid_file_extension(".joblib")
+)
+@validation(
+    "config_file",
+    "File di configurazione",
+    ensure_not_none("config.json"), ensure_valid_file_extension(".json"), ensure_file_exists("../configs/", "")
+)
+@validation(
+    "model",
+    "Modello da addestrare",
+    ensure_not_none(exception_type=ModelNotFoundError)
+)
+@validation(
+    "data_frame",
+    "Dataset da usare per l'addestramento",
+    ensure_not_none(exception_type=DatasetNotFoundError)
+)
+@validation(
+    "retrain",
+    "Opzione di retraining",
+    ensure_not_none(False), ensure_valid_type(bool) 
+)
 class ModelTraining:
     __YES_CHOICES = ["yes", "y", ""]
     __NO_CHOICES = ["no", "n"]
-    MODEL_PATH = "../models/"
-    CONFIG_PATH = "../configs/"
 
     def __init__(
             self, 
-            outputName: str = None, 
+            output_name: str = None, 
             model=None, 
-            dataFrame: pd.DataFrame = None,
-            configFile: str = None,
+            data_frame: pd.DataFrame = None,
+            config_file: str = None,
             retrain: bool = None
     ):
-        self.__outputName = self.__check_output_name(outputName)
-        self.__model = self.__check_model(model)
-        self.__dataFrame = self.__check_dataframe(dataFrame)
-
-        # Imposta configurazione di default
-        self.__configFile = self.__check_config_file(configFile)
-        self.__init_configs()
-
-        self.__isToRetrain = retrain if retrain is not None else False
-        self.__check_model_path()
-
-    def __check_output_name(self, outputName: str) -> str:
-        """Controlla se il nome del modello è stato inserito"""
-        if outputName:
-            return self.__check_extension_file(outputName, ".joblib", "model_")
-        else:
-            return "model_" + str(calendar.timegm(time.gmtime())) + ".joblib"
-
-    def __check_config_file(self, configFile: str) -> str:
-        """Controlla se il file di configurazione è stato inserito"""
-        if configFile and os.path.exists(self.CONFIG_PATH + configFile):
-            return self.__check_extension_file(configFile, ".json")
-        else:
-            return "config.json"
-
-    @staticmethod
-    def __check_model(model):
-        """Controlla se il modello è stato inserito"""
-        if model is not None:
-            return model
-        else:
-            raise ModelNotFoundError("Inserire il modello da addestrare")
-
-    @staticmethod
-    def __check_dataframe(dataFrame):
-        """Controlla se il dataframe è stato inserito"""
-        if dataFrame is not None:
-            return dataFrame
-        else:
-            raise DatasetNotFoundError("Inserire il dataset da usare per l'addestramento")
+        self._output_name = output_name
+        self._model = model
+        self._data_frame = data_frame
+        self._config_file = config_file
+        self._retrain = retrain
 
     def run(self):
         """Avvia il training del modello."""
+
+        self.__init_configs()
+
         self.__check_duplicates()
 
         print("[INFO] Training del modello in corso...")
-        return self.__model_training()
+        return self._model_training()
 
     def __init_configs(self):
         """Inizializza i parametri di configurazione."""
         # Leggi file di configurazione
-        with open(self.CONFIG_PATH + self.__configFile, 'r') as f:
-            print()
+        with open(CONFIG_PATH + self._config_file, 'r') as f:
             features = json.load(f)
 
         # Estrai i nomi delle feature con valore falso (cioè le feature da filtrare)
@@ -99,27 +90,15 @@ class ModelTraining:
 
         if "message_composition" in self.__features_disabled:
             self.__features_disabled.remove("message_composition")
-            self.__features_disabled.extend(featureConstruction.POS_LIST)
-
-    def __check_model_path(self):
-        """Controlla se la cartella del modello esiste, altrimenti lo crea."""
-        if not os.path.exists(self.MODEL_PATH):
-            os.makedirs(self.MODEL_PATH)
-
-    @staticmethod
-    def __check_extension_file(filename: str, ext: str, pre: str = ""):
-        """Controlla se l'estensione del file è quella specificata"""
-        if not filename.endswith(ext):
-            filename += ext
-        if not filename.startswith(pre):
-            filename = pre + filename
-        return filename
+            self.__features_disabled.extend(FeatureConstruction.POS_LIST)
 
     def __check_duplicates(self):
-        # Controllo in caso si voglia sovrascrivere comunque
-        while os.path.exists(self.MODEL_PATH + self.__outputName) and not self.__isToRetrain:
+        """Controlla se il modello esiste già e se si vuole sovrascriverlo."""
 
-            user_input = input("Il modello '{}' già esiste, sovrascriverlo? [Y/N]\n".format(self.__outputName))
+        # Controllo in caso si voglia sovrascrivere comunque
+        while os.path.exists(MODELS_PATH + self._output_name) and not self._retrain:
+
+            user_input = input("Il modello '{}' già esiste, sovrascriverlo? [Y/N]\n".format(self._output_name))
             user_input = user_input.lower()
 
             if user_input in self.__YES_CHOICES:
@@ -131,15 +110,15 @@ class ModelTraining:
                 print('Inserire \"Y\" o \"N\"')
                 continue
 
-    def __model_training(self, kfold: int = 0):
+    def _model_training(self, kfold: int = 0):
         """Applica random forest sul dataframe."""
 
         # LOGGING:: Stampa il nome del modello trainato
-        logging.info(f"Modello trainato: {self.__outputName}")
+        logging.info(f"Modello trainato: {self._output_name}")
 
         # Definisci le features (X) e il target (Y) cioè la variabile da prevedere
-        X = self.__dataFrame.drop(['user'], axis=1)
-        y = self.__dataFrame["user"]
+        X = self._data_frame.drop(['user'], axis=1)
+        y = self._data_frame["user"]
 
         # Rimuovi le feature da filtrare (specificate nel file di configurazione)
         if self.__features_disabled:
@@ -157,7 +136,7 @@ class ModelTraining:
         # (numero di fold di solito 5 o 10)
         if kfold > 0:
             scoring = ['accuracy', 'precision_weighted', 'recall_weighted', 'f1_weighted']
-            scores = cross_validate(self.__model, X, y, cv=kfold, scoring=scoring)
+            scores = cross_validate(self._model, X, y, cv=kfold, scoring=scoring)
 
             # Stampa un report sulle metriche di valutazione del modello
             print(f"[INFO] Media delle metriche di valutazione dopo {kfold}-fold cross validation:")
@@ -174,8 +153,8 @@ class ModelTraining:
         # TRAINING CON SPLIT CLASSICO
         test_size = 0.2  # percentuale del dataset di test dopo lo split
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
-        self.__model.fit(X_train, y_train)
-        predictions = self.__model.predict(X_test)
+        self._model.fit(X_train, y_train)
+        predictions = self._model.predict(X_test)
 
         # Genera un report per il modello addestrato
         print(f"\n[INFO] Report con {int((1 - test_size) * 100)}% training set e {int(test_size * 100)}% test set:")
@@ -199,7 +178,7 @@ class ModelTraining:
         feature_names = X.columns.tolist()  # Estrai i nomi di tutte le feature
 
         try:
-            importances = self.__model.feature_importances_
+            importances = self._model.feature_importances_
             important_features = np.argsort(importances)[::-1]
             top_n_features_cmdline = important_features[:n]
             top_n_features_logging = important_features[:m]
@@ -223,36 +202,36 @@ class ModelTraining:
         # Crea una pipeline con lo scaler e il classificatore
         pipeline = Pipeline([
             ('scaler', scaler),
-            ('classifier', self.__model)
+            ('classifier', self._model)
         ])
 
         # Salva la pipeline (scaler e modello)
-        dump(pipeline, self.MODEL_PATH + self.__outputName)
+        dump(pipeline, MODELS_PATH + self._output_name)
 
         # CREA CONFUSION MATRIX E ROC CURVE
-        cm = confusion_matrix(y_test, predictions, labels=self.__model.classes_)
+        cm = confusion_matrix(y_test, predictions, labels=self._model.classes_)
 
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=self.__model.classes_)
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=self._model.classes_)
         disp.plot()
         plt.show()
 
         # Convert labels to binary format
-        y_test_bin = label_binarize(y_test, classes=self.__model.classes_)
+        y_test_bin = label_binarize(y_test, classes=self._model.classes_)
 
         # Compute probabilities for each class
-        y_score = self.__model.predict_proba(X_test)
+        y_score = self._model.predict_proba(X_test)
 
         # Compute ROC curve and ROC area for each class
         fpr = dict()
         tpr = dict()
         roc_auc = dict()
-        for i in range(len(self.__model.classes_)):
+        for i in range(len(self._model.classes_)):
             fpr[i], tpr[i], _ = roc_curve(y_test_bin[:, i], y_score[:, i])
             roc_auc[i] = auc(fpr[i], tpr[i])
 
         # Plot ROC curve for each class
         plt.figure()
-        for i in range(len(self.__model.classes_)):
+        for i in range(len(self._model.classes_)):
             plt.plot(fpr[i], tpr[i], label='ROC curve (area = %0.2f)' % roc_auc[i])
         plt.plot([0, 1], [0, 1], 'k--')
         plt.xlim([0.0, 1.0])

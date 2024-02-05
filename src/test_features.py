@@ -2,7 +2,7 @@ from utility.cmdlineManagement.datasetSelection import DatasetSelection
 from utility.cmdlineManagement.modelSelection import ModelSelection
 from utility.model.modelTraining import ModelTraining
 import json
-from utility.logging import Logger
+from utility.logging import LoggerReport as Logger
 import time
 import calendar
 

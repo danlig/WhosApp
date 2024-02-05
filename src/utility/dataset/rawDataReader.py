@@ -1,16 +1,18 @@
 import os
 import logging
 from tqdm import tqdm
+from ..config_path import RAWDATA_PATH
 
 
-class rawDataReader:
-    def __init__(self):
-        # Path della cartella delle chat
-        # dove verranno analizzati in automatico tutti i file al suo interno
-        self.DATA_PATH = "../data/rawdata"
+class RawDataReader:
 
-    def __init__(self, dataPath):
-        self.DATA_PATH = dataPath
+    # Secondo me non serve il costruttore.
+    # Alla fine i file da leggere sono sempre all'interno della cartella RAWDATA_PATH.
+    # Se si vuole cambiare la cartella basta cambiare il valore di RAWDATA_PATH.
+
+    # P.S Se si cambia, si può rendere la classe un singleton oppure una classe statica.
+    def __init__(self, data_path=RAWDATA_PATH):
+        self.DATA_PATH = data_path
 
     def read_all_files(self):
         """Restituisce una lista di stringhe contenente il contenuto di tutti i file nella cartella DATA_PATH."""

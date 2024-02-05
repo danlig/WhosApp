@@ -1,5 +1,4 @@
 import re
-import os
 import json
 import spacy
 import emojis
@@ -10,11 +9,21 @@ from tqdm import tqdm
 from collections import Counter, defaultdict
 from feel_it import EmotionClassifier, SentimentClassifier
 from sklearn.feature_extraction.text import CountVectorizer, HashingVectorizer
+from ..clean_coding.decorator import check_path_exists
+from ..clean_coding.ensure import validation, ensure_not_none, ensure_valid_file_extension, ensure_file_exists
+from ..config_path import CONFIG_PATH, DATASET_PATH, WORDLIST_PATH
 
 
-class featureConstruction:
-    WORDLIST_PATH = "../data/wordlists/"
-
+@check_path_exists(path=CONFIG_PATH, create=True)
+@validation(
+    "dataset_name",
+    "Nome del dataset",
+    ensure_not_none())
+@validation(
+    "config",
+    "File di configurazione",
+    ensure_valid_file_extension(".json"), ensure_file_exists(CONFIG_PATH, ""))
+class FeatureConstruction:
     # Lista tag POS (Part-of-speech)
     POS_LIST = [
         "ADJ", "ADP", "ADV", "AUX", "CONJ", "CCONJ", "DET", "INTJ",
@@ -22,41 +31,26 @@ class featureConstruction:
         "SYM", "VERB", "X", "SPACE"
     ]
 
-    def __init__(self, dataFrame: pd.DataFrame, datasetPath: str, config_path="../configs/config.json", saveDataFrame :bool = True):
-        self.DATASET_PATH = self.__check_dataset_path(datasetPath)
-        self.__dataFrame = dataFrame
-        self.__config = self.__check_config_file(config_path)
-        self.__columns_to_drop = ['message_composition', 'message']
+    def __init__(self, data_frame: pd.DataFrame, dataset_name: str, config_path="config.json", save_dataFrame:bool = True):
+        self.__dataFrame = data_frame
+        self._dataset_name = dataset_name
+        self._config = config_path if config_path is not None else "config.json"
+        self._columns_to_drop = ['message_composition', 'message']
 
         self.__init_configs()
         self.__feature_construction()
         
-        if saveDataFrame:
+        if save_dataFrame:
             self.__write_dataFrame()
 
     def get_dataframe(self):
         return self.__dataFrame
 
-    @staticmethod
-    def __check_dataset_path(dataset_path: str) -> str:
-        """Controlla se il percorso del dataset esiste"""
-        if dataset_path is not None:
-            return dataset_path
-        else:
-            raise ValueError("Percorso del dataset non valido")
-
-    @staticmethod
-    def __check_config_file(config_path: str) -> str:
-        if config_path and os.path.exists(config_path):
-            return config_path
-        else:
-            raise ValueError("File di configurazione non valido")
-
     def __init_configs(self):
         """Inizializza variabili in base al file di configurazione."""
 
         # Leggi file di configurazione
-        with open(self.__config, 'r') as f:
+        with open(CONFIG_PATH + self._config, 'r') as f:
             features = json.load(f)
 
         # Estrai i nomi delle feature con valore vero (cioè feature abilitate)
@@ -79,14 +73,14 @@ class featureConstruction:
 
         # Car   ica wordlist
         if "swear_words" in self.__features_enabled:
-            with open(self.WORDLIST_PATH + "swear_words.txt", 'r') as f:
+            with open(WORDLIST_PATH + "swear_words.txt", 'r') as f:
                 self.__swear_words = set(f.read().splitlines())
 
                 # rimuovi l'ultimo carattere di ogni parola (per parole in dialetto)
                 self.__swear_words.update([word[:-1] for word in self.__swear_words])
 
         if "common_words" in self.__features_enabled:
-            with open(self.WORDLIST_PATH + "common_words.txt", 'r') as f:
+            with open(WORDLIST_PATH + "common_words.txt", 'r') as f:
                 self.__common_words = set(f.read().splitlines())
 
         # Inizializza sentiment/emotion classifier
@@ -112,7 +106,7 @@ class featureConstruction:
         else:
             # Rimuovi dal dataframe se non è abilitata
             # (perché non ha senso per il messaggio in input in demo.py)
-            self.__columns_to_drop.append("responsiveness")
+            self._columns_to_drop.append("responsiveness")
 
         # Colonne (features) che si aggiungeranno al dataframe
         features = {key: [] for key in self.__features_enabled}
@@ -123,7 +117,7 @@ class featureConstruction:
             "\n".join(f"\t{feature_name}" for feature_name in self.__features_enabled)
         )
 
-        for message in tqdm(self.__dataFrame['message']):
+        for message in tqdm(self._dataFrame['message']):
             # Resetta analisi nlp per nuovo messaggio
             self.__nlp_it_message = None
 
@@ -136,15 +130,15 @@ class featureConstruction:
 
         # Aggiungi nuove colonne al dataframe
         for feature_name in self.__features_enabled:
-            self.__dataFrame[feature_name] = features[feature_name]
+            self._dataFrame[feature_name] = features[feature_name]
 
         if "message_composition" in self.__features_enabled:
             for pos in self.POS_LIST:
-                self.__dataFrame[pos] = [d[pos] for d in features["message_composition"]]
+                self._dataFrame[pos] = [d[pos] for d in features["message_composition"]]
 
         # Rimuovi features inutili in fase di training
         # errors='ignore' per evitare errori se la colonna non esiste
-        self.__dataFrame = self.__dataFrame.drop(self.__columns_to_drop, axis=1, errors='ignore')
+        self.__dataFrame = self._dataFrame.drop(self._columns_to_drop, axis=1, errors='ignore')
 
         # Assicurati che il nome delle colonne siano stringhe
         # (altrimenti ci sono problemi in fase di esportazione del file parquet)
@@ -182,11 +176,11 @@ class featureConstruction:
 
         # Unisci la matrice al dataframe
         df_hashed_text = pd.DataFrame(hashed_text.toarray())
-        self.__dataFrame = pd.concat([self.__dataFrame, df_hashed_text], axis=1)
+        self._dataFrame = pd.concat([self.__dataFrame, df_hashed_text], axis=1)
 
     def __write_dataFrame(self):
         """Salva il dataframe aggiornato in formato parquet."""
-        self.__dataFrame.to_parquet(self.DATASET_PATH)
+        self.__dataFrame.to_parquet(DATASET_PATH + self._dataset_name)
 
     def type_token_ratio(self, m):
         """Calcola la ricchezza lessicale di un messaggio."""

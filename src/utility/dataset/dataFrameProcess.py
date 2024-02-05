@@ -2,7 +2,7 @@ import re
 import logging
 import pandas as pd
 from sklearn.utils import resample
-from utility.logging import LoggerUser
+from ..logging import LoggerUser
 
 
 class DataFrameProcessor:
@@ -87,7 +87,7 @@ class DataFrameProcessor:
         def matches_blacklist(message: str):
             for pattern in blacklist_patterns:
                 if pattern.fullmatch(message):
-                    # il carattere "‎" è presente nei messaggi informativi di IOS
+                    # Il carattere "‎" è presente nei messaggi informativi di IOS
                     return True
             return False
 
@@ -128,13 +128,12 @@ class DataFrameProcessor:
         print(f"[INFO] Rimozione degli utenti non prensenti nel alias file")
         return df.loc[df['user'] != self.__unique_users.index(self.__other_user)]
 
-    def get_dataframe(self) -> pd.DataFrame:
+    def run(self) -> pd.DataFrame:
         """
         Crea il dataframe e effettua le operazioni di pulizia e bilanciamento
         """
         
         df = pd.DataFrame({
-            # "date": self.__dates,    # Inutile in fase di training
             "responsiveness": self.__responsiveness(),
             "user": self.__users,
             "message": self.__messages

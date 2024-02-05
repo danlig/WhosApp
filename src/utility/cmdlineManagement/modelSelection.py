@@ -1,7 +1,7 @@
 import logging
 #from simple_term_menu import TerminalMenu
 import inquirer
-from utility.model.model_list import models
+from ..model.model_list import models
 
 
 class ModelSelection:

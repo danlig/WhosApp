@@ -11,6 +11,7 @@ joblib~=1.3.2
 inquirer~=3.2.1
 pyarrow
 skops
-requests
-flask
+requests~=2.31.0
+flask~=3.0.1
 inquirer
+matplotlib~=3.8.2

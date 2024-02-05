@@ -1,8 +1,34 @@
 import os
 import logging
 import datetime
+from collections.abc import Hashable
+from ..config_path import LOGS_PATH, LOGS_ALIASES_PATH, LOGS_DATASET_PATH, LOGS_MODELS_PATH, LOGS_PIPELINE_PATH
+from ..clean_coding.decorator import check_path_exists
+from ..clean_coding.ensure import *
 
 
+@check_path_exists("../logs/", create=True)
+@check_path_exists("../logs/dataset/", create=True)
+@check_path_exists("../logs/training", create=True)
+@check_path_exists("../logs/pipeline", create=True)
+@validation(
+    "name",
+    "Nome del file di log",
+    ensure_valid_file_extension(".log"), ensure_not_none("unknown")
+)
+@validation(
+    "start_message",
+    "Messaggio di inizio log",
+    ensure_valid_type(Hashable), ensure_not_none("!! START NEW LOG !!")
+)
+@validation(
+    "path",
+    "Percorso del file di log",
+    ensure_into_allowed_options(
+        options=[LOGS_PATH, LOGS_ALIASES_PATH, LOGS_DATASET_PATH, LOGS_MODELS_PATH, LOGS_PIPELINE_PATH],
+        default_value=LOGS_PATH
+    )
+)
 class LoggerReport:
     """
     Classe che gestisce i logger statici del programma
@@ -18,38 +44,14 @@ class LoggerReport:
             self,
             name: str = "unknown",
             start_message: str = "!! START NEW LOG !!",
-            path: str = DEFAULT_LOGGING_PATH
+            path: str = LOGS_PATH
     ):
-        self.__name = name if name is not None else "unknown"
-        self.__start_message = start_message if start_message is not None else "!! START NEW LOG !!"
-        self.__path = path if path in self.__logging_paths else self.DEFAULT_LOGGING_PATH
-        self.__filelog = None
-
-        # Controlla se le path esistono
-        self.__check_path()
-        self.__check_path(self.__path)
-
-        # Crea il file di log
-        self.__check_filelog()
-
-    @property
-    def name(self):
-        return self.__name
-
-    @name.setter
-    def name(self, name: str):
         self.__name = name
-        self.__check_filelog()
+        self.__start_message = start_message
+        self.__path = path
+        self.__filelog = self.__format_name_filelog()
 
-    @staticmethod
-    def __check_path(path: str = DEFAULT_LOGGING_PATH):
-        if not os.path.exists(path):
-            os.makedirs(path)
-
-    def __check_filelog(self):
-        if not self.__name.endswith(".log"):
-            self.__name += ".log"
-
+    def __format_name_filelog(self):
         if self.__path == self.DATASET_LOGGING_PATH:
             name = f"report-dataset_{self.__name}"
         elif self.__path == self.TRAINING_LOGGING_PATH:
@@ -57,7 +59,7 @@ class LoggerReport:
         else:
             name = f"report-{self.__name}"
 
-        self.__filelog = self.__path + name
+        return self.__path + name
 
     def run(self):
         logging.basicConfig(
